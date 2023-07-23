@@ -1,0 +1,173 @@
+*****************************IFLS DATA CLEANING****************************
+
+Purpose: To see what factors affect someone's probability to have a joint decision in their household.
+
+[Dependent Variable: Decision-Makers about child's education]
+
+/* 1: decisions are only made by respondents
+2: decisions are only made by respondents' spouses
+3: decisions are taken jointly */
+
+use $hh14/b3a_pk2.dta, clear
+reshape wide pk18, i(hhid12 pid12) j(pk18type)str //reshape the data from long to wide shape
+
+gen educexp_decision = 3 if pk18F=="AB" 
+replace educexp_decision=1 if pk18F=="A" 
+replace educexp_decision=2 if  pk18F=="B"
+	tab educexp_decision
+
+save $output/hh_decision14.dta, replace
+
+
+[Independent Variable 1: Education]
+
+use $hh14/b3a_dl1.dta, clear
+des
+order hhid14 pid14 dl04 dl06 dl07
+keep  hhid12 pid12 dl04 dl06 dl07
+tab dl04,m
+tab dl06,m
+tab dl07,m
+generate education=0       if dl06==1 | dl06==90 | dl06==. | dl07==. | (dl06==98 & dl07==98)
+replace  education=dl07    if (dl06==2 | dl06==11 | dl06==14 | dl06==72) & dl07<7
+replace  education=6       if (dl06==2 | dl06==11 | dl06==14 | dl06==72) & dl07==7 ///
+                              | (dl06==95 & dl07==7) | dl06==98 & dl07==7
+replace  education=5       if (dl06==2 | dl06==11 | dl06==14 | dl06==72) & dl07>7
+replace  education=6+dl07  if (dl06==3 | dl06==4 | dl06==12 | dl06==17 | dl06==73) ///
+                               & dl07<4
+replace  education=9       if (dl06==3 | dl06==4 | dl06==12 | dl06==17 | dl06==73) /// 
+                               & (dl07==4 | dl07==5 | dl07==7)
+replace  education=8       if (dl06==3 | dl06==4 | dl06==12 | dl06==17 | dl06==73) /// 
+                               & dl07>7
+replace  education=9+dl07  if (dl06==5 | dl06==6 | dl06==15 | dl06==74) & dl07<4
+replace  education=12      if (dl06==5 | dl06==6 | dl06==15 | dl06==74) & ///
+                              (dl07==4|dl07==7)
+replace  education=11      if (dl06==5 | dl06==6 | dl06==15 | dl06==74) & dl07==98
+replace  education=12+dl07 if (dl06==13 | dl06==60 | dl06==61 | dl06==62 | dl06==63) /// 
+                               & dl07<5
+replace  education=16      if (dl06==13 | dl06==60 | dl06==61 | dl06==62 | dl06==63) /// 
+                               & (dl07==5 | dl07==6 | dl07==7)
+replace education=15       if (dl06==13 | dl06==60 | dl06==61 | dl06==62 | dl06==63)& dl07>7
+replace education=0 if education==. 
+
+gen     kat_educ=1 if education==0 
+replace kat_educ=2 if education>=1 & education<7
+replace kat_educ=3 if education>=7 & education<=12
+replace kat_educ=4 if education>12
+
+order hhid12 pid12 education kat_educ 
+keep  hhid12 pid12 education kat_educ 
+sum education kat_educ
+count
+sort hhid12 pid12 
+save "$output/educ14.dta", replace
+
+
+[Independent Variable 2: Gender]
+
+use $hh12/bk_ar1.dta, clear
+ren ar07 male
+recode male (3=0)
+label define male 1"lakilaki" 0"perempuan"
+label values male male
+keep pid12 hhid12 male
+order hhid12 pid12
+
+[Independent Variable 3: Residence]
+
+use $hh12/bk_sc1.dta, clear
+ren sc05 urban
+recode urban (2=0)
+label define urban 1"urban" 0"rural"
+label values urban urban
+keep hhid12 urban
+tab urban
+save $output/urban12.dta, replace
+
+[Independent Variable 4: Generation]
+
+/* Gen Y = 19-29 years old
+Gen X = 35-50 years old
+Baby Boomers = 51-69 years old
+
+gen kat_age = 1 if age>=19 & age<=29
+replace kat_age=2 if if age>=35 & age<=50
+replace kat_age=3  if age>=51 & age<=69
+
+la def kat_age 1"gen y" 2"gen x" 3"baby boomers"
+la val kat_age kat_age
+
+tab kat_age
+
+[Independent Variable 4: Working-status based on BPS definition of working]
+
+use $hh12/b3a_tk1.dta, clear
+recode tk02 tk03 (8=.)
+gen employ = (tk01==1 | tk02==1 | tk03==1 | tk04==1)
+label define employ 1"employed" 0"unemployed"
+label values employ employ
+tab employ
+
+save $output/emp12.dta, replace
+
+[Independent Variable 5: Per capita Expenditure]
+
+use $pce/pce12nom.dta, clear
+gen lpce=log(pce)
+save "$output/pce12.dta", replace
+
+[Independent Variable 6: Length of Marriage]
+
+use "$hh12/b3a_kw31.dta", clear
+tab kw302jy
+ren kw302jy yrmarr
+drop if yrmarr==.|yrmarr==9998
+
+tab yrmarr, m
+
+gen tmarr=2015-yrmarr
+tab tmarr, m
+
+save $output/tmarr12_3a, replace
+
+use "$hh12/b4_kw41.dta", clear
+tab kw402iyr  
+ren kw402iyr   yrmarr
+drop if yrmarr==.|yrmarr==9998
+
+tab yrmarr, m
+
+gen tmarr=2015-yrmarr
+tab tmarr, m
+
+save $output/tmarr12_4, replace
+
+append using $output/tmarr12_3a
+
+save $output/tmarr12, replace
+
+
+*****merging
+
+
+*****regression & outreg
+
+ssc install outreg2
+
+mlogit educexp_decision education male kat_age employ lpce tmarr urban
+margins, dydx(*) atmeans predict (pr outcome (1)) post
+outreg2 using ifls_cleaning.doc, replace
+
+mlogit educexp_decision education male kat_age employ lpce tmarr urban
+margins, dydx(*) atmeans predict (pr outcome (2)) post
+outreg2 using ifls_cleaning.doc, append
+
+mlogit educexp_decision education male kat_age employ lpce tmarr urban
+margins, dydx(*) atmeans predict (pr outcome (3)) post
+outreg2 using ifls_cleaning.doc, append
+
+
+----------------------------------------------------------------------END----------------------------------------------------------------
+
+
+
