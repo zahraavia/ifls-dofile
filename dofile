@@ -1,15 +1,28 @@
 *****************************IFLS DATA CLEANING****************************
 
-Purpose: To see what factors affect someone's probability to have a joint decision in their household.
+/*Purpose: To see what factors affect someone's probability to have a joint decision in their household.
 
-[Dependent Variable: Decision-Makers about child's education]
+[Roster] 
 
-/* 1: decisions are only made by respondents
+used to keep respondent who still alive & live in the HH */
+
+use $hh14/bk_ar1.dta, clear
+gen member14_ar=(ar01a==1 | ar01a==2| ar01a==5 | ar01a==11)
+bys hhid14: egen hhsize14=sum(member14_ar)
+tab hhsize14
+tab ar01a member14_ar
+keep if member14_ar==1
+
+save "$output\roster14.dta", replace
+
+/* [Dependent Variable: Decision-Makers about child's education]
+
+1: decisions are only made by respondents
 2: decisions are only made by respondents' spouses
 3: decisions are taken jointly */
 
 use $hh14/b3a_pk2.dta, clear
-reshape wide pk18, i(hhid12 pid12) j(pk18type)str //reshape the data from long to wide shape
+reshape wide pk18, i(hhid14 pid14) j(pk2type)str //reshape the data from long to wide shape
 
 gen educexp_decision = 3 if pk18F=="AB" 
 replace educexp_decision=1 if pk18F=="A" 
@@ -19,12 +32,12 @@ replace educexp_decision=2 if  pk18F=="B"
 save $output/hh_decision14.dta, replace
 
 
-[Independent Variable 1: Education]
+/*[Independent Variable 1: Education] -> Credit: Firman Witoelar */
 
 use $hh14/b3a_dl1.dta, clear
 des
 order hhid14 pid14 dl04 dl06 dl07
-keep  hhid12 pid12 dl04 dl06 dl07
+keep  hhid14 pid14 dl04 dl06 dl07
 tab dl04,m
 tab dl06,m
 tab dl07,m
@@ -55,114 +68,166 @@ replace kat_educ=2 if education>=1 & education<7
 replace kat_educ=3 if education>=7 & education<=12
 replace kat_educ=4 if education>12
 
-order hhid12 pid12 education kat_educ 
-keep  hhid12 pid12 education kat_educ 
+order hhid14 pid14 education kat_educ 
+keep  hhid14 pid14 education kat_educ 
 sum education kat_educ
 count
-sort hhid12 pid12 
+sort hhid14 pid14 
 save "$output/educ14.dta", replace
 
 
-[Independent Variable 2: Gender]
+/*[Independent Variable 2: Sex]*/
 
-use $hh12/bk_ar1.dta, clear
+use $hh14/bk_ar1.dta, clear
 ren ar07 male
 recode male (3=0)
-label define male 1"lakilaki" 0"perempuan"
+label define male 1"male" 0"female"
 label values male male
-keep pid12 hhid12 male
-order hhid12 pid12
+keep pid14 hhid14 male
+order hhid14 pid14
 
-[Independent Variable 3: Residence]
+save $output/male14.dta, replace
 
-use $hh12/bk_sc1.dta, clear
+/*[Independent Variable 3: Residence] */
+
+use $hh14/bk_sc1.dta, clear
 ren sc05 urban
 recode urban (2=0)
 label define urban 1"urban" 0"rural"
 label values urban urban
-keep hhid12 urban
+keep hhid14 urban
 tab urban
-save $output/urban12.dta, replace
+save $output/urban14.dta, replace
 
-[Independent Variable 4: Generation]
 
-/* Gen Y = 19-29 years old
+/*[Independent Variable 4: Generation]
+
+Gen Z = 3-18 years old
+Gen Y = 19-29 years old
 Gen X = 35-50 years old
-Baby Boomers = 51-69 years old
+Baby Boomers = 51-69 years old */
 
-gen kat_age = 1 if age>=19 & age<=29
-replace kat_age=2 if if age>=35 & age<=50
-replace kat_age=3  if age>=51 & age<=69
+use $hh14/bk_ar1.dta, clear
+recode ar09 (998/999=.)
+ren ar09 age
 
-la def kat_age 1"gen y" 2"gen x" 3"baby boomers"
+gen agesq = age^2
+
+gen kat_age = 1 if age>=3 & age<=18
+replace kat_age=2 if age>=19 & age<=29
+replace kat_age=3 if age>=35 & age<=50
+replace kat_age=4 if age>=51 & age<=69
+
+la def kat_age 1"gen z" 2"gen y" 3"gen x" 4"baby boomers"
 la val kat_age kat_age
 
 tab kat_age
 
-[Independent Variable 4: Working-status based on BPS definition of working]
+save $output/kat_age14.dta, replace
 
-use $hh12/b3a_tk1.dta, clear
+/* [Independent Variable 4: Working-status based on BPS definition of working] */
+
+use $hh14/b3a_tk1.dta, clear
 recode tk02 tk03 (8=.)
 gen employ = (tk01==1 | tk02==1 | tk03==1 | tk04==1)
 label define employ 1"employed" 0"unemployed"
 label values employ employ
 tab employ
 
-save $output/emp12.dta, replace
+save $output/emp14.dta, replace
 
-[Independent Variable 5: Per capita Expenditure]
+/* [Independent Variable 5: Per capita Expenditure] */
 
-use $pce/pce12nom.dta, clear
+use $pce/pce14nom.dta, clear
 gen lpce=log(pce)
-save "$output/pce12.dta", replace
+save "$output/pce14.dta", replace
 
-[Independent Variable 6: Length of Marriage]
+/* [Independent Variable 6: Length of Marriage] -> Credit: Amira Tanaya, modified by me */ 
 
-use "$hh12/b3a_kw31.dta", clear
-tab kw302jy
-ren kw302jy yrmarr
-drop if yrmarr==.|yrmarr==9998
+use "$hh14/b3a_kw1.dta", clear
+tab kw02jyr
+ren kw02jyr yrmarr
+drop if yrmarr==9998
+
+tab yrmarr
+
+gen tmarr=2015-yrmarr
+tab tmarr
+
+save $output/tmarr14_3a, replace
+
+use "$hh14/b4_kw2.dta", clear
+tab kw02iyr   
+ren kw02iyr yrmarr
+drop if yrmarr==9998
 
 tab yrmarr, m
 
 gen tmarr=2015-yrmarr
-tab tmarr, m
+tab tmarr
 
-save $output/tmarr12_3a, replace
+append using $output/tmarr14_3a, force 
 
-use "$hh12/b4_kw41.dta", clear
-tab kw402iyr  
-ren kw402iyr   yrmarr
-drop if yrmarr==.|yrmarr==9998
+save $output/tmarr14, replace
 
-tab yrmarr, m
+/*****merging
 
-gen tmarr=2015-yrmarr
-tab tmarr, m
+1:1: merge individual data to individual data
+1:m: merge individual data to household data
+m:1: merge household data to individual data */
 
-save $output/tmarr12_4, replace
+use $output/roster14, clear //use roster as master data because i want to make sure that respondents are still alive & live in the HH
 
-append using $output/tmarr12_3a
+merge 1:1 hhid14 pid14 using $output/hh_decision14
+drop if _merge!=3
+drop _merge
 
-save $output/tmarr12, replace
+merge 1:1 hhid14 pid14 using $output/educ14
+drop if _merge!=3
+drop _merge
+
+merge 1:1 hhid14 pid14 using $output/male14
+drop if _merge!=3
+drop _merge
+
+merge 1:1 hhid14 pid14 using $output/kat_age14
+drop if _merge!=3
+drop _merge
+
+merge 1:1 hhid14 pid14 using $output/emp14
+drop if _merge!=3
+drop _merge
+
+merge 1:m hhid14 pid14 using $output/tmarr14
+drop if _merge!=3
+drop _merge
+
+merge m:1 hhid14 using $output/pce14
+drop if _merge!=3
+drop _merge
+
+merge m:1 hhid14 using $output/urban14
+drop if _merge!=3
+drop _merge
 
 
-*****merging
+/*****regression & outreg
 
+using multinomial logit regression cause the outcome more than 2 and the outcome are not ordinal
 
-*****regression & outreg
+outreg is allows us to output our regression results to other file formats, such as ms. word. */
 
 ssc install outreg2
 
-mlogit educexp_decision education male kat_age employ lpce tmarr urban
+mlogit educexp_decision education male i.kat_age employ lpce tmarr urban
 margins, dydx(*) atmeans predict (pr outcome (1)) post
 outreg2 using ifls_cleaning.doc, replace
 
-mlogit educexp_decision education male kat_age employ lpce tmarr urban
+mlogit educexp_decision education male i.kat_age employ lpce tmarr urban
 margins, dydx(*) atmeans predict (pr outcome (2)) post
 outreg2 using ifls_cleaning.doc, append
 
-mlogit educexp_decision education male kat_age employ lpce tmarr urban
+mlogit educexp_decision education male i.kat_age employ lpce tmarr urban
 margins, dydx(*) atmeans predict (pr outcome (3)) post
 outreg2 using ifls_cleaning.doc, append
 
